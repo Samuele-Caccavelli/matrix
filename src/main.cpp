@@ -13,6 +13,8 @@ int main(int argc, char **argv) {
   M(1, 1) = 2.;
   M(2, 2) = 3.;
 
+  M(1, 1) = 4.;
+
   std::cout << "M(1, 1): " << M(1, 1) << "\n"
             << "M(1, 2): " << M(1, 2) << "\n"
             << "M(2, 1): " << M(2, 1) << "\n"
@@ -20,7 +22,9 @@ int main(int argc, char **argv) {
 
   std::cout << "Let's try to access some value out of bound" << std::endl;
 
-  std::cout << "M(1, 3): " << M(3, 1) << std::endl;
+  std::cout << "M(1, 3): " << M(1, 3) << std::endl;
+
+  M.upper_bound();
 
   return 0;
 }
