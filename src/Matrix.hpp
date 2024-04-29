@@ -9,7 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
-// #include <functional>
+#include <vector>
 
 enum StorageOrder {RowWise = 0, ColumnWise = 1};
 
@@ -29,7 +29,14 @@ struct less_col {
 
 template <class T, StorageOrder ORDERING> class Matrix {
 private:
+  // dynamic storage technique
   std::map<KeyType, T> data;
+
+  // compressed storage technique
+  std::vector<std::size_t> row_idx{};
+  std::vector<std::size_t> col_idx{};
+  std::vector<T> data_compressed{};
+
   bool compressed = false;
   std::size_t n_rows;
   std::size_t n_cols;
@@ -56,8 +63,18 @@ public:
               << std::endl;
   }
 
-  void upper_bound() const;
-  void lower_bound() const;
+  // compress
+  void compress();
+
+  // print
+  template <class U, StorageOrder ORDER>
+  friend std::ostream &operator<<(std::ostream &os, const Matrix<U, ORDER> &M);
+  template <class U, StorageOrder ORDER>
+  friend std::vector<U> operator*(const Matrix<U, ORDER> &M,
+                                  const std::vector<U> &v);
+
+  // resize
+  void resize(std::size_t r = 0, std::size_t c = 0);
 };
 
 template <class T, StorageOrder ORDERING>
@@ -111,7 +128,18 @@ auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
 template <class T, StorageOrder ORDERING>
 auto &Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) {
 
-  // std::cout << "Call of the non-const version" << std::endl;
+  // here we add an element to the map, that is empty since the matrix is in its
+  // compressed state
+  // TODO it will be removed when we try to go back to a dynamic state
+  //! Non ho provato a usare una exception perchè non volevo un try ... catch
+  //! nel main
+  if (compressed) {
+    std::cerr << "!!! TRYING TO ADD AN ELEMENT IN A COMPRESSED STATE !!!"
+              << std::endl;
+    std::cerr << "The operation will be ignored\n" << std::endl;
+    KeyType key{0, 0};
+    return data[key];
+  }
 
   if (r > n_rows)
     n_rows = r;
@@ -123,24 +151,118 @@ auto &Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) {
   return data[key];
 }
 
-template <class T, StorageOrder ORDERING>
-void Matrix<T, ORDERING>::upper_bound() const {
-  KeyType second_row{2, 1};
+// template <class T, StorageOrder ORDERING>
+// void Matrix<T, ORDERING>::upper_bound() const {
+//   KeyType second_row{2, 1};
 
-  std::cout << "The first row of the matrix is: " << std::endl;
+//   std::cout << "The first row of the matrix is: " << std::endl;
 
-  auto it = data.begin();
+//   auto it = data.begin();
 
-  while (it->first < second_row) {
-    std::cout << "M(" << it->first[0] << ", " << it->first[1]
-              << "): " << it->second << std::endl;
-    ++it;
+//   while (it->first < second_row) {
+//     std::cout << "M(" << it->first[0] << ", " << it->first[1]
+//               << "): " << it->second << std::endl;
+//     ++it;
+//   }
+// }
+
+template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
+  if (is_compressed())
+    return;
+
+  std::size_t non_zero = data.size();
+
+  row_idx.resize(n_rows + 1, 0);
+  col_idx.resize(non_zero, 0);
+  data_compressed.resize(non_zero, 0);
+
+  std::size_t idx = 0;
+
+  for (auto iter = data.cbegin(); iter != data.cend(); ++iter) {
+    row_idx[iter->first[0]] += 1;
+    col_idx[idx] = iter->first[1];
+    data_compressed[idx] = iter->second;
+    ++idx;
   }
+
+  for (std::size_t idx = 1; idx < n_rows + 1; ++idx) {
+    row_idx[idx] += row_idx[idx - 1];
+  }
+
+  data.clear();
+
+  compressed = true;
 }
 
 template <class T, StorageOrder ORDERING>
-void Matrix<T, ORDERING>::lower_bound() const {
-  return;
+std::ostream &operator<<(std::ostream &os, const Matrix<T, ORDERING> &M) {
+  if (M.compressed) {
+    os << "Compressed format" << std::endl;
+
+    os << "Values: ";
+    for (const auto &elem : M.data_compressed)
+      os << " " << elem << " ";
+    os << std::endl;
+
+    os << "Cols: ";
+    for (const auto &elem : M.col_idx)
+      os << " " << elem << " ";
+    os << std::endl;
+
+    os << "Rows: ";
+    for (const auto &elem : M.row_idx)
+      os << " " << elem << " ";
+    os << std::endl;
+
+    return os;
+  }
+
+  os << "Dynamic format" << std::endl;
+  for (const auto &elem : M.data)
+    os << "(" << elem.first[0] << ", " << elem.first[1] << "): " << elem.second
+       << std::endl;
+  return os;
+}
+
+template <class T, StorageOrder ORDERING>
+void Matrix<T, ORDERING>::resize(std::size_t r, std::size_t c) {
+  if (compressed) {
+    std::cerr
+        << "The matrix is in a compressed state, it's not possible to resize it"
+        << std::endl;
+    return;
+  }
+
+  if (r > n_rows)
+    n_rows = r;
+
+  if (c > n_cols)
+    n_cols = c;
+}
+
+template <class T, StorageOrder ORDERING>
+std::vector<T> operator*(const Matrix<T, ORDERING> &M,
+                         const std::vector<T> &v) {
+
+  if (M.n_cols != v.size()) {
+    std::cerr << "Dimensions for the multiplication are not compatible"
+              << std::endl;
+    std::vector<T> res{};
+    return res;
+  }
+
+  std::vector<T> res(M.n_rows, 0);
+
+  if (!M.compressed) {
+    for (size_t i = 0; i < M.n_rows; ++i) {
+      for (size_t j = 0; j < M.n_cols; ++j) {
+        res[i] += M(i + 1, j + 1) * v[j];
+      }
+    }
+    return res;
+  }
+
+  // for
 }
 
 // // class specialization for ColumnWise ordering
