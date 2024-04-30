@@ -6,9 +6,12 @@
 
 #include <array>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <map>
+#include <sstream>
+#include <string>
 #include <vector>
 
 enum StorageOrder {RowWise = 0, ColumnWise = 1};
@@ -41,10 +44,6 @@ private:
   std::size_t n_rows;
   std::size_t n_cols;
 
-  // getters
-  std::size_t rows() const;
-  std::size_t cols() const;
-
   // setters
   void rows(size_t r);
   void cols(size_t c);
@@ -52,6 +51,10 @@ private:
 public:
   // true if the matrix is in the compressed format
   bool is_compressed();
+
+  // getters
+  std::size_t rows() const;
+  std::size_t cols() const;
 
   // call operator
   auto operator()(std::size_t r, std::size_t c) const;
@@ -66,15 +69,23 @@ public:
   // compress
   void compress();
 
+  // uncompress
+  void uncompress();
+
   // print
   template <class U, StorageOrder ORDER>
   friend std::ostream &operator<<(std::ostream &os, const Matrix<U, ORDER> &M);
+
+  // multiplication
   template <class U, StorageOrder ORDER>
   friend std::vector<U> operator*(const Matrix<U, ORDER> &M,
                                   const std::vector<U> &v);
 
   // resize
   void resize(std::size_t r = 0, std::size_t c = 0);
+
+  // read from a stream
+  void read_MatrixMarket(std::string &filename);
 };
 
 template <class T, StorageOrder ORDERING>
@@ -195,6 +206,25 @@ template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
 }
 
 template <class T, StorageOrder ORDERING>
+void Matrix<T, ORDERING>::uncompress() {
+  if (!is_compressed())
+    return;
+
+  for (size_t i = 0; i < n_rows; ++i) {
+    for (size_t j = row_idx[i]; j < row_idx[i + 1]; ++j) {
+      KeyType key{i + 1, col_idx[j]};
+      data.emplace(std::make_pair(key, data_compressed[j]));
+    }
+  }
+
+  data_compressed.clear();
+  row_idx.clear();
+  col_idx.clear();
+
+  compressed = false;
+}
+
+template <class T, StorageOrder ORDERING>
 std::ostream &operator<<(std::ostream &os, const Matrix<T, ORDERING> &M) {
   if (M.compressed) {
     os << "Compressed format" << std::endl;
@@ -241,6 +271,40 @@ void Matrix<T, ORDERING>::resize(std::size_t r, std::size_t c) {
 }
 
 template <class T, StorageOrder ORDERING>
+void Matrix<T, ORDERING>::read_MatrixMarket(std::string &filename) {
+  // Try to open the file
+  std::ifstream input(filename);
+  if (!input.is_open())
+    throw std::runtime_error("ERROR: problems while opening the file\n");
+
+  // Read header line
+  std::string line;
+  std::getline(input, line);
+  if (line.substr(0, 21) != "%%MatrixMarket matrix")
+    throw std::runtime_error("ERROR: invalid Matrix Market file format\n");
+
+  // Read matrix dimensions
+  std::size_t non_zero{0};
+  std::getline(input, line);
+  std::stringstream ss(line);
+  ss >> n_rows >> n_cols >> non_zero;
+
+  // Insert non-zero elemets
+  size_t i{0};
+  size_t j{0};
+  T value{};
+  for (size_t k = 0; k < non_zero; ++k) {
+    std::getline(input, line);
+    std::stringstream ss(line);
+    ss >> i >> j >> value;
+    KeyType key{i, j};
+    data.emplace(std::make_pair(key, value));
+  }
+
+  std::cout << "File read correctly" << std::endl;
+}
+
+template <class T, StorageOrder ORDERING>
 std::vector<T> operator*(const Matrix<T, ORDERING> &M,
                          const std::vector<T> &v) {
 
@@ -262,7 +326,12 @@ std::vector<T> operator*(const Matrix<T, ORDERING> &M,
     return res;
   }
 
-  // for
+  for (size_t i = 0; i < M.n_rows; ++i) {
+    for (size_t j = M.row_idx[i]; j < M.row_idx[i + 1]; ++j) {
+      res[i] += M.data_compressed[j] * v[M.col_idx[j] - 1];
+    }
+  }
+  return res;
 }
 
 // // class specialization for ColumnWise ordering
