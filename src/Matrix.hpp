@@ -1,11 +1,9 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 
-//! just to avoid squiggles for size_t
-#include <cstddef>
-
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -19,7 +17,7 @@ enum StorageOrder {RowWise = 0, ColumnWise = 1};
 namespace algebra {
 using KeyType = std::array<std::size_t, 2>;
 
-// return lhs < rhs using RowWise ordering
+// Return lhs < rhs using RowWise ordering
 struct less_col {
   bool operator()(const KeyType lhs, const KeyType rhs) const {
     if (lhs[1] < rhs[1])
@@ -32,64 +30,59 @@ struct less_col {
 
 template <class T, StorageOrder ORDERING> class Matrix {
 private:
-  // dynamic storage technique
+  // Dynamic storage technique
   std::map<KeyType, T> data;
 
-  // compressed storage technique
+  // Compressed storage technique
   std::vector<std::size_t> row_idx{};
   std::vector<std::size_t> col_idx{};
   std::vector<T> data_compressed{};
 
   bool compressed = false;
+
+  // Dimensions of the matrix
   std::size_t n_rows;
   std::size_t n_cols;
 
-  // setters
-  void rows(size_t r);
-  void cols(size_t c);
-
 public:
-  // true if the matrix is in the compressed format
-  bool is_compressed();
+  // Default constructor
+  Matrix(std::size_t r = 0, std::size_t c = 0) : n_rows{r}, n_cols{c} {}
 
-  // getters
+  // True if the matrix is in the compressed format
+  bool is_compressed() const;
+
+  // Getters
   std::size_t rows() const;
   std::size_t cols() const;
 
-  // call operator
+  // Convert the matrix to CSR (or CSC)
+  void compress();
+
+  // Convert the matrix to COOmap
+  void uncompress();
+
+  // Resize
+  void resize(std::size_t r = 0, std::size_t c = 0);
+
+  // Read from a file in MatrixMarket format
+  void read_MatrixMarket(std::string &filename);
+
+  // Call operators
   auto operator()(std::size_t r, std::size_t c) const;
   auto &operator()(std::size_t r, std::size_t c);
 
-  // default constructor
-  Matrix(std::size_t r = 0, std::size_t c = 0) : n_rows{r}, n_cols{c} {
-    std::cout << "I'm a " << n_rows << " x " << n_cols << " matrix"
-              << std::endl;
-  }
-
-  // compress
-  void compress();
-
-  // uncompress
-  void uncompress();
-
-  // print
+  // Insertion operator that handles both storage solutions
   template <class U, StorageOrder ORDER>
   friend std::ostream &operator<<(std::ostream &os, const Matrix<U, ORDER> &M);
 
-  // multiplication
+  // Multiplication operator that handles Matrix * vector
   template <class U, StorageOrder ORDER>
   friend std::vector<U> operator*(const Matrix<U, ORDER> &M,
                                   const std::vector<U> &v);
-
-  // resize
-  void resize(std::size_t r = 0, std::size_t c = 0);
-
-  // read from a stream
-  void read_MatrixMarket(std::string &filename);
 };
 
 template <class T, StorageOrder ORDERING>
-bool Matrix<T, ORDERING>::is_compressed() {
+bool Matrix<T, ORDERING>::is_compressed() const {
   return compressed;
 }
 
@@ -102,80 +95,6 @@ template <class T, StorageOrder ORDERING>
 std::size_t Matrix<T, ORDERING>::cols() const {
   return n_cols;
 }
-
-template <class T, StorageOrder ORDERING>
-void Matrix<T, ORDERING>::rows(std::size_t r) {
-  n_rows = r;
-}
-
-template <class T, StorageOrder ORDERING>
-void Matrix<T, ORDERING>::cols(std::size_t c) {
-  n_cols = c;
-}
-
-template <class T, StorageOrder ORDERING>
-auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
-
-  // std::cout << "Call of the const version" << std::endl;
-
-  if (r > n_rows || c > n_cols) {
-    std::cerr << "You are trying to access an element out of bound"
-              << std::endl;
-    return std::numeric_limits<T>::quiet_NaN();
-  }
-
-  KeyType key{r, c};
-  // find returns the iterator to the found object if it exists
-  auto elem = data.find(key);
-
-  if (elem != data.end())
-    return elem->second;
-  return 0.;
-}
-
-// here to allow assigning new elements even if they are "out of bound", there
-// is no check on the dimensions of the matrix, and if not respected, the
-// dimensions are redefined
-template <class T, StorageOrder ORDERING>
-auto &Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) {
-
-  // here we add an element to the map, that is empty since the matrix is in its
-  // compressed state
-  // TODO it will be removed when we try to go back to a dynamic state
-  //! Non ho provato a usare una exception perchè non volevo un try ... catch
-  //! nel main
-  if (compressed) {
-    std::cerr << "!!! TRYING TO ADD AN ELEMENT IN A COMPRESSED STATE !!!"
-              << std::endl;
-    std::cerr << "The operation will be ignored\n" << std::endl;
-    KeyType key{0, 0};
-    return data[key];
-  }
-
-  if (r > n_rows)
-    n_rows = r;
-
-  if (c > n_cols)
-    n_cols = c;
-
-  KeyType key{r, c};
-  return data[key];
-}
-
-// template <class T, StorageOrder ORDERING>
-// void Matrix<T, ORDERING>::upper_bound() const {
-//   KeyType second_row{2, 1};
-
-//   std::cout << "The first row of the matrix is: " << std::endl;
-
-//   auto it = data.begin();
-
-//   while (it->first < second_row) {
-//     std::cout << "M(" << it->first[0] << ", " << it->first[1]
-//               << "): " << it->second << std::endl;
-//     ++it;
-//   }
-// }
 
 template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
   if (is_compressed())
@@ -190,7 +109,7 @@ template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
   std::size_t idx = 0;
 
   for (auto iter = data.cbegin(); iter != data.cend(); ++iter) {
-    row_idx[iter->first[0]] += 1;
+    row_idx[iter->first[0] + 1] += 1;
     col_idx[idx] = iter->first[1];
     data_compressed[idx] = iter->second;
     ++idx;
@@ -212,7 +131,7 @@ void Matrix<T, ORDERING>::uncompress() {
 
   for (size_t i = 0; i < n_rows; ++i) {
     for (size_t j = row_idx[i]; j < row_idx[i + 1]; ++j) {
-      KeyType key{i + 1, col_idx[j]};
+      KeyType key{i, col_idx[j]};
       data.emplace(std::make_pair(key, data_compressed[j]));
     }
   }
@@ -225,7 +144,143 @@ void Matrix<T, ORDERING>::uncompress() {
 }
 
 template <class T, StorageOrder ORDERING>
+void Matrix<T, ORDERING>::resize(std::size_t r, std::size_t c) {
+  if (compressed) {
+    throw std::runtime_error("ERROR: the matrix is in a compressed state, it's "
+                             "not possible to resize it\n");
+    // std::cerr
+    //     << "The matrix is in a compressed state, it's not possible to resize
+    //     it"
+    //     << std::endl;
+    // return;
+  }
+
+  if (r > n_rows)
+    n_rows = r;
+
+  if (c > n_cols)
+    n_cols = c;
+}
+
+template <class T, StorageOrder ORDERING>
+void Matrix<T, ORDERING>::read_MatrixMarket(std::string &filename) {
+  if (!data.empty() || !data_compressed.empty())
+    throw std::runtime_error(
+        "ERROR: you can only read from a file in a matrix without any data, "
+        "otherwise old data could be overwritten\n");
+  if (compressed)
+    throw std::runtime_error("ERROR: you can only read from a file in a "
+                             "uncompressed format matrix\n");
+
+  // Try to open the file
+  std::ifstream input(filename);
+  if (!input.is_open())
+    throw std::runtime_error("ERROR: problems while opening the file\n");
+
+  // Read header line
+  std::string line;
+  std::getline(input, line);
+  if (line.substr(0, 21) != "%%MatrixMarket matrix")
+    throw std::runtime_error("ERROR: invalid Matrix Market file format\n");
+
+  // Read matrix dimensions
+  std::size_t non_zero{0};
+  std::getline(input, line);
+  std::stringstream ss(line);
+  ss >> n_rows >> n_cols >> non_zero;
+
+  std::cout << "I'm reading a " << n_rows << " x " << n_cols << " matrix"
+            << std::endl;
+
+  // Insert non-zero elemets
+  size_t i{0};
+  size_t j{0};
+  T value{};
+  for (size_t k = 0; k < non_zero; ++k) {
+    std::getline(input, line);
+    std::stringstream ss(line);
+    ss >> i >> j >> value;
+    KeyType key{i, j};
+    data.emplace(std::make_pair(key, value));
+  }
+
+  std::cout << "File read correctly" << std::endl;
+}
+
+template <class T, StorageOrder ORDERING>
+auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
+  if (r > n_rows || c > n_cols) {
+    throw std::runtime_error("ERROR: you are trying to access an element out "
+                             "of bound in a const function\n");
+    // std::cerr << "You are trying to access an element out of bound"
+    //           << std::endl;
+    // return std::numeric_limits<T>::quiet_NaN();
+  }
+
+  if (!compressed) {
+    // find returns the iterator to the found object if it exists
+    KeyType key{r, c};
+    auto elem = data.find(key);
+
+    if (elem != data.end())
+      return elem->second;
+    return 0.;
+  }
+
+  for (size_t j = row_idx[r]; j < row_idx[r + 1]; ++j) {
+    if (col_idx[j] == c)
+      return data_compressed[j];
+  }
+  return 0.;
+}
+
+// here to allow assigning new elements even if they are "out of bound", there
+// is no check on the dimensions of the matrix, and if not respected, the
+// dimensions are redefined
+template <class T, StorageOrder ORDERING>
+auto &Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) {
+  if (compressed) {
+    for (size_t j = row_idx[r]; j < row_idx[r + 1]; ++j) {
+      if (col_idx[j] == c)
+        return data_compressed[j];
+    }
+    throw std::runtime_error("ERROR: trying to add an element with the matrix "
+                             "in compressed format\n");
+    // std::cerr << "!!! TRYING TO ADD AN ELEMENT IN A COMPRESSED STATE !!!"
+    //           << std::endl;
+    // std::cerr << "The operation will be ignored\n" << std::endl;
+    // KeyType key{0, 0};
+    // return data[key];
+  }
+
+  if ((r + 1) > n_rows)
+    n_rows = r + 1;
+
+  if ((c + 1) > n_cols)
+    n_cols = c + 1;
+
+  KeyType key{r, c};
+  return data[key];
+}
+
+// template <class T, StorageOrder ORDERING>
+// void Matrix<T, ORDERING>::upper_bound() const {
+//   KeyType second_row{2, 1};
+
+//   std::cout << "The first row of the matrix is: " << std::endl;
+
+//   auto it = data.begin();
+
+//   while (it->first < second_row) {
+//     std::cout << "M(" << it->first[0] << ", " << it->first[1]
+//               << "): " << it->second << std::endl;
+//     ++it;
+//   }
+// }
+
+template <class T, StorageOrder ORDERING>
 std::ostream &operator<<(std::ostream &os, const Matrix<T, ORDERING> &M) {
+  os << "This is a " << M.n_rows << " x " << M.n_cols << " matrix" << std::endl;
   if (M.compressed) {
     os << "Compressed format" << std::endl;
 
@@ -255,64 +310,16 @@ std::ostream &operator<<(std::ostream &os, const Matrix<T, ORDERING> &M) {
 }
 
 template <class T, StorageOrder ORDERING>
-void Matrix<T, ORDERING>::resize(std::size_t r, std::size_t c) {
-  if (compressed) {
-    std::cerr
-        << "The matrix is in a compressed state, it's not possible to resize it"
-        << std::endl;
-    return;
-  }
-
-  if (r > n_rows)
-    n_rows = r;
-
-  if (c > n_cols)
-    n_cols = c;
-}
-
-template <class T, StorageOrder ORDERING>
-void Matrix<T, ORDERING>::read_MatrixMarket(std::string &filename) {
-  // Try to open the file
-  std::ifstream input(filename);
-  if (!input.is_open())
-    throw std::runtime_error("ERROR: problems while opening the file\n");
-
-  // Read header line
-  std::string line;
-  std::getline(input, line);
-  if (line.substr(0, 21) != "%%MatrixMarket matrix")
-    throw std::runtime_error("ERROR: invalid Matrix Market file format\n");
-
-  // Read matrix dimensions
-  std::size_t non_zero{0};
-  std::getline(input, line);
-  std::stringstream ss(line);
-  ss >> n_rows >> n_cols >> non_zero;
-
-  // Insert non-zero elemets
-  size_t i{0};
-  size_t j{0};
-  T value{};
-  for (size_t k = 0; k < non_zero; ++k) {
-    std::getline(input, line);
-    std::stringstream ss(line);
-    ss >> i >> j >> value;
-    KeyType key{i, j};
-    data.emplace(std::make_pair(key, value));
-  }
-
-  std::cout << "File read correctly" << std::endl;
-}
-
-template <class T, StorageOrder ORDERING>
 std::vector<T> operator*(const Matrix<T, ORDERING> &M,
                          const std::vector<T> &v) {
 
   if (M.n_cols != v.size()) {
-    std::cerr << "Dimensions for the multiplication are not compatible"
-              << std::endl;
-    std::vector<T> res{};
-    return res;
+    throw std::runtime_error(
+        "ERROR: dimensions for the multiplication are not compatible\n");
+    // std::cerr << "Dimensions for the multiplication are not compatible"
+    //           << std::endl;
+    // std::vector<T> res{};
+    // return res;
   }
 
   std::vector<T> res(M.n_rows, 0);
