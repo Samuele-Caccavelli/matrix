@@ -1,5 +1,5 @@
 CXX      ?= g++
-CXXFLAGS ?= -std=c++20
+CXXFLAGS ?= -std=c++20 -O3
 SRCS = src/main.cpp 
 HEADERS = src/Matrix.hpp
 OBJS = main.o

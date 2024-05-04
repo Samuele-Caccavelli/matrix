@@ -1,4 +1,9 @@
 #include "Matrix.hpp"
+#include <chrono>
+#include <cmath>
+#include <complex>
+#include <cxxabi.h>
+#include <typeinfo>
 
 template <class T>
 std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
@@ -77,7 +82,163 @@ void func5(auto &M) {
   std::cout << M << std::endl;
 }
 
+void func6(auto &M) {
+  // Perform a dynamic format matrix x vector operation
+  std::cout << "\nTest 6" << std::endl;
+
+  std::vector<double> v(M.cols(), 1);
+  for (double k = 0; k < v.size(); ++k) {
+    v[k] += k;
+  }
+
+  std::cout << "The matrix is:" << M << std::endl;
+  std::cout << "The vector is:" << v << std::endl;
+
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  auto res = M * v;
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(
+      end_time - start_time);
+
+  std::cout << "Their product is:" << res
+            << "It has been evaluated in: " << elapsed_time.count()
+            << " microseconds" << std::endl;
+}
+
+void func7(auto &M) {
+  // Perform a compressed format matrix x vector operation
+  std::cout << "\nTest 7" << std::endl;
+
+  M.compress();
+
+  std::vector<double> v(M.cols(), 1);
+  for (double k = 0; k < v.size(); ++k) {
+    v[k] += k;
+  }
+
+  std::cout << "The matrix is:" << M << std::endl;
+  std::cout << "The vector is:" << v << std::endl;
+
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  auto res = M * v;
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(
+      end_time - start_time);
+
+  std::cout << "Their product is:" << res
+            << "It has been evaluated in: " << elapsed_time.count()
+            << " microseconds" << std::endl;
+}
+
+// Func 8-9 are very similar to the previous function, just without all the
+// prints on the terminal to avoid cluttering it too much
+void func8(auto &M) {
+  // Perform a dynamic format matrix x vector operation
+  std::cout << "\nTest 8" << std::endl;
+
+  std::vector<double> v(M.cols(), 1);
+  for (double k = 0; k < v.size(); ++k) {
+    v[k] += k;
+  }
+
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  auto res = M * v;
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(
+      end_time - start_time);
+
+  std::cout << "Their product has been evaluated in: " << elapsed_time.count()
+            << " microseconds" << std::endl;
+}
+
+void func9(auto &M) {
+  // Perform a compressed format matrix x vector operation
+  std::cout << "\nTest 9" << std::endl;
+
+  M.compress();
+
+  std::vector<double> v(M.cols(), 1);
+  for (double k = 0; k < v.size(); ++k) {
+    v[k] += k;
+  }
+
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  auto res = M * v;
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(
+      end_time - start_time);
+
+  std::cout << "Their product has been evaluated in: " << elapsed_time.count()
+            << " microseconds" << std::endl;
+}
+
+void func10() {
+  // Perform a RowWise complex matrix times a complex vector operation
+  //|1+i,  0  | * |1| = | 1+ i|
+  //| 0 , 2+2i|   |i|   |-2+2i|
+  // The code to print the type is taken online
+  // It should work for both GCC and Clang compilers
+  std::cout << "\nTest 10" << std::endl;
+
+  using namespace std::complex_literals;
+  algebra::Matrix<std::complex<double>, RowWise> Mc;
+  Mc(0, 0) = 1.0 + 1i;
+  Mc(1, 1) = 2. + 2i;
+  std::cout << "The matrix type is: "
+            << abi::__cxa_demangle(typeid(Mc).name(), 0, 0, 0) << std::endl;
+  std::cout << Mc << std::endl;
+
+  std::vector<std::complex<double>> vec{1, 1i};
+  std::cout << "The vector type is: "
+            << abi::__cxa_demangle(typeid(vec).name(), 0, 0, 0) << std::endl;
+  std::cout << vec << std::endl;
+
+  auto res = Mc * vec;
+  std::cout << "The result type is: "
+            << abi::__cxa_demangle(typeid(res).name(), 0, 0, 0) << std::endl;
+  std::cout << Mc * vec << std::endl;
+}
+
+void func11() {
+  // Perform a ColumnWise complex matrix times a complex vector operation
+  //|1+i,  0  | * |1| = | 1+ i|
+  //| 0 , 2+2i|   |i|   |-2+2i|
+  // The code to print the type is taken online
+  // It should work for both GCC and Clang compilers
+  std::cout << "\nTest 11" << std::endl;
+
+  using namespace std::complex_literals;
+  algebra::Matrix<std::complex<double>, ColumnWise> Mc;
+  Mc(0, 0) = 1.0 + 1i;
+  Mc(1, 1) = 2. + 2i;
+  std::cout << "The matrix type is: "
+            << abi::__cxa_demangle(typeid(Mc).name(), 0, 0, 0) << std::endl;
+  std::cout << Mc << std::endl;
+
+  std::vector<std::complex<double>> vec{1, 1i};
+  std::cout << "The vector type is: "
+            << abi::__cxa_demangle(typeid(vec).name(), 0, 0, 0) << std::endl;
+  std::cout << vec << std::endl;
+
+  auto res = Mc * vec;
+  std::cout << "The result type is: "
+            << abi::__cxa_demangle(typeid(res).name(), 0, 0, 0) << std::endl;
+  std::cout << Mc * vec << std::endl;
+}
+
 int main(int argc, char **argv) {
+  /*
+  //---------------------------------------------------------------------------
+  //TEST FOR ROW-WISE MATRICES
+  //---------------------------------------------------------------------------
   algebra::Matrix<double, RowWise> M1;
 
   func1(M1);
@@ -95,54 +256,101 @@ int main(int argc, char **argv) {
 
   func4(M3);
 
-  //! ATTENTION: This test is set up to throw an exception
-  //! Comment it away to proceed with the other tests
-  M3.compress();
-  func5(M3);
+  // //! ATTENTION: This test is set up to throw an exception
+  // //! Comment it away to proceed with the other tests
+  // M3.compress();
+  // func5(M3);
 
-  // // std::vector<double> v1{1, 1};
-  // // // std::cout << "1st vector:\n" << v1 << std::endl;
+  algebra::Matrix<double, RowWise> M;
+  M(0, 0) = 4.;
+  M(1, 1) = 7.;
+  M(1, 2) = 5.;
+  M(2, 1) = 6.;
 
-  // // // std::cout << "Result of the mul:\n" << M * v1 << std::endl;
+  // The matrix is
+  //[4, 0, 0,
+  // 0, 7, 5,
+  // 0, 6, 0]
+  // While the vector is
+  //[1, 2, 3]'
+  // So the expected value is
+  //[4, 29, 12]'
+  func6(M);
+  func7(M);
+  */
 
-  // // std::vector<double> v2{1, 1, 1};
-  // // // std::cout << "2nd vector:\n" << v2 << std::endl;
+  /*
+  //---------------------------------------------------------------------------
+  //TEST FOR COLUMN-WISE MATRICES
+  //---------------------------------------------------------------------------
+  algebra::Matrix<double, ColumnWise> M4;
 
-  // // // std::cout << "Result of the mul:\n" << M * v2 << std::endl;
+  func1(M4);
 
-  // M.compress();
-  // M(1, 1) = 8.;
-  // std::cout << M << std::endl;
+  algebra::Matrix<double, ColumnWise> M5(2, 2);
+  M5(0, 0) = 1.;
 
-  // M(2, 1) = 8.;
-  // std::cout << M << std::endl;
+  func2(M5);
 
-  // // std::cout << "1st vector:\n" << v1 << std::endl;
+  M5.compress();
+  func3(M5);
 
-  // // std::cout << "Result of the mul:\n" << M * v1 << std::endl;
+  algebra::Matrix<double, ColumnWise> M6(1, 1);
+  M6(0, 0) = 100.;
 
-  // // std::cout << "2nd vector:\n" << v2 << std::endl;
+  func4(M6);
 
-  // // std::cout << "Result of the mul:\n" << M * v2 << std::endl;
+  // //! ATTENTION: This test is set up to throw an exception
+  // //! Comment it away to proceed with the other tests
+  // M6.compress();
+  // func5(M6);
 
-  // M(1, 1) = 2.;
+  algebra::Matrix<double, ColumnWise> M;
+  M(0, 0) = 4.;
+  M(1, 1) = 7.;
+  M(1, 2) = 5.;
+  M(2, 1) = 6.;
 
-  // std::cout << M << std::endl;
+  // The matrix is
+  //[4, 0, 0,
+  // 0, 7, 5,
+  // 0, 6, 0]
+  // While the vector is
+  //[1, 2, 3]'
+  // So the expected value is
+  //[4, 29, 12]'
+  func6(M);
+  func7(M);
+  */
 
-  // M.uncompress();
-  // std::cout << M << std::endl;
+  std::string filename{"lnsp_131.mtx"};
+  /*
+  //---------------------------------------------------------------------------
+  //TEST FOR EFFICIENCY OF * OPERATOR USING A ROW-WISE BIG MATRIX
+  //(DYNAMIC VS COMPRESS FORMAT)
+  //---------------------------------------------------------------------------
+  algebra::Matrix<double, RowWise> N1;
+  N1.read_MatrixMarket(filename);
+  func8(N1);
+  func9(N1);
+  */
 
-  // std::string filename{"lnsp_131.mtx"};
+  /*
+  //---------------------------------------------------------------------------
+  //TEST FOR EFFICIENCY OF * OPERATOR USING A COLUMN-WISE BIG MATRIX
+  //(DYNAMIC VS COMPRESS FORMAT)
+  //---------------------------------------------------------------------------
+  algebra::Matrix<double, ColumnWise> N2;
+  N2.read_MatrixMarket(filename);
+  func8(N2);
+  func9(N2);
+  */
 
-  // algebra::Matrix<double, RowWise> N;
-
-  // N.read_MatrixMarket(filename);
-
-  // std::cout << N << std::endl;
-
-  // std::vector<double> v_file(M.cols(), 1);
-
-  // std::cout << "Result of the mul:\n" << M * v_file << std::endl;
+  //---------------------------------------------------------------------------
+  // TEST FOR * OPERATOR USING COMPLEX NUMBERS
+  //---------------------------------------------------------------------------
+  func10();
+  func11();
 
   return 0;
 }
