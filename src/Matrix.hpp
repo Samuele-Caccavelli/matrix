@@ -1,8 +1,11 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 
+#include "is_complex.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <complex>
 #include <cstddef>
 #include <fstream>
 #include <iostream>
@@ -12,10 +15,12 @@
 #include <string>
 #include <vector>
 
-enum StorageOrder {RowWise = 0, ColumnWise = 1};
-
 namespace algebra {
 using KeyType = std::array<std::size_t, 2>;
+
+enum StorageOrder { RowWise = 0, ColumnWise = 1 };
+
+enum NormType { Infinity = 0, One = 1, Frobenius = 2 };
 
 // Return lhs < rhs using RowWise ordering
 struct less_col {
@@ -66,6 +71,9 @@ public:
 
   // Read from a file in MatrixMarket format
   void read_MatrixMarket(const std::string &filename);
+
+  // Calculate the norm of the matrix
+  template <NormType TYPE> double norm() const;
 
   // Call operators
   auto operator()(std::size_t r, std::size_t c) const;
@@ -207,6 +215,78 @@ void Matrix<T, ORDERING>::read_MatrixMarket(const std::string &filename) {
   std::cout << "File read correctly" << std::endl;
 }
 
+template <class T, algebra::StorageOrder ORDERING>
+template <algebra::NormType TYPE>
+double algebra::Matrix<T, ORDERING>::norm() const {
+  using namespace apsc::TypeTraits;
+  if constexpr (TYPE == Infinity) {
+    if (compressed) {
+      std::vector<double> par_sum(n_rows, 0);
+      for (size_t i = 0; i < n_rows; ++i) {
+        for (size_t j = row_idx[i]; j < row_idx[i + 1]; ++j) {
+          if constexpr (is_complex<T>())
+            par_sum[i] += std::sqrt(std::norm(data_compressed[j]));
+          else
+            par_sum[i] += std::abs(data_compressed[j]);
+        }
+      }
+      auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+      return *max_iter;
+    }
+    std::vector<double> par_sum(n_rows, 0);
+    for (size_t i = 0; i < n_rows; ++i) {
+      for (size_t j = 0; j < n_cols; ++j) {
+        if constexpr (is_complex<T>())
+          par_sum[i] += std::sqrt(std::norm(this->operator()(i, j)));
+        else
+          par_sum[i] += std::abs(this->operator()(i, j));
+      }
+    }
+    auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+    return *max_iter;
+  }
+
+  if constexpr (TYPE == One) {
+    if (compressed) {
+      std::vector<double> par_sum(n_cols, 0);
+      for (size_t i = 0; i < col_idx.size(); ++i) {
+        if constexpr (is_complex<T>())
+          par_sum[col_idx[i]] += std::sqrt(std::norm(data_compressed[i]));
+        else
+          par_sum[col_idx[i]] += std::abs(data_compressed[i]);
+      }
+      auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+      return *max_iter;
+    }
+    std::vector<double> par_sum(n_cols, 0);
+    for (size_t i = 0; i < n_rows; ++i) {
+      for (size_t j = 0; j < n_cols; ++j) {
+        if constexpr (is_complex<T>())
+          par_sum[j] += std::sqrt(std::norm(this->operator()(i, j)));
+        else
+          par_sum[j] += std::abs(this->operator()(i, j));
+      }
+    }
+    auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+    return *max_iter;
+  }
+
+  if constexpr (TYPE == Frobenius) {
+    if (compressed) {
+      double par_sum{0};
+      for (const auto &elem : data_compressed) {
+        par_sum += std::norm(elem);
+      }
+      return std::sqrt(par_sum);
+    }
+    double par_sum{0};
+    for (const auto &elem : data) {
+      par_sum += std::norm(elem.second);
+    }
+    return std::sqrt(par_sum);
+  }
+}
+
 template <class T, StorageOrder ORDERING>
 auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
   if (r >= n_rows || c >= n_cols) {
@@ -223,7 +303,7 @@ auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
         return data_compressed[j];
     }
     // needed for avoiding errors with complex type
-    T ret;
+    T ret{};
     return ret;
   }
 
@@ -234,7 +314,7 @@ auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
   if (elem != data.end())
     return elem->second;
   // needed for avoiding errors with complex type
-  T ret;
+  T ret{};
   return ret;
 }
 
@@ -541,7 +621,7 @@ auto Matrix<T, ColumnWise>::operator()(std::size_t r, std::size_t c) const {
         return data_compressed[j];
     }
     // needed for avoiding errors with complex type
-    T ret;
+    T ret{};
     return ret;
   }
 
@@ -552,7 +632,7 @@ auto Matrix<T, ColumnWise>::operator()(std::size_t r, std::size_t c) const {
   if (elem != data.end())
     return elem->second;
   // needed for avoiding errors with complex type
-  T ret;
+  T ret{};
   return ret;
 }
 

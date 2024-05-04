@@ -4,6 +4,8 @@ SRCS = src/main.cpp
 HEADERS = src/Matrix.hpp
 OBJS = main.o
 EXEC = main
+PACS_ROOT = ../../pacs-examples/Examples
+UTILITIES = ${PACS_ROOT}/src/Utilities
 
 .PHONY = all clean
 
@@ -13,7 +15,7 @@ ${EXEC}: ${OBJS}
 	${CXX} ${CXXFLAGS} ${OBJS} -o ${EXEC}
 
 ${OBJS} : ${SRCS} ${HEADERS}
-	${CXX} ${CXXFLAGS} -c ${SRCS}
+	${CXX} ${CXXFLAGS} -c -I${UTILITIES} ${SRCS}
 
 clean:
 	${RM} *.o
