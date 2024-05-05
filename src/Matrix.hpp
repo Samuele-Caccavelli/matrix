@@ -1,7 +1,6 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 
-#include "is_complex.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -43,6 +42,7 @@ private:
   std::vector<std::size_t> col_idx{};
   std::vector<T> data_compressed{};
 
+  // Boolean that records the storage technique utilized
   bool compressed = false;
 
   // Dimensions of the matrix
@@ -79,11 +79,12 @@ public:
   auto operator()(std::size_t r, std::size_t c) const;
   auto &operator()(std::size_t r, std::size_t c);
 
-  // Insertion operator that handles both storage solutions
+  // Friend operator to print the matrix on screen
+  // It handles both storage solutions
   template <class U, StorageOrder ORDER>
   friend std::ostream &operator<<(std::ostream &os, const Matrix<U, ORDER> &M);
 
-  // Multiplication operator that handles Matrix * vector
+  // Multiplication friend operator that handles Matrix * vector
   template <class U, StorageOrder ORDER>
   friend std::vector<U> operator*(const Matrix<U, ORDER> &M,
                                   const std::vector<U> &v);
@@ -105,6 +106,7 @@ std::size_t Matrix<T, ORDERING>::cols() const {
 }
 
 template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
+  // If already compressed, do nothing
   if (compressed)
     return;
 
@@ -116,6 +118,7 @@ template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
 
   std::size_t idx = 0;
 
+  // Add element in the new storage
   for (auto iter = data.cbegin(); iter != data.cend(); ++iter) {
     row_idx[iter->first[0] + 1] += 1;
     col_idx[idx] = iter->first[1];
@@ -123,10 +126,13 @@ template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
     ++idx;
   }
 
+  // As it was before, row_idx contained the number of non-zero elements on that
+  // row
   for (std::size_t idx = 1; idx < n_rows + 1; ++idx) {
     row_idx[idx] += row_idx[idx - 1];
   }
 
+  // Clear the old storage
   data.clear();
 
   compressed = true;
@@ -134,9 +140,11 @@ template <class T, StorageOrder ORDERING> void Matrix<T, ORDERING>::compress() {
 
 template <class T, StorageOrder ORDERING>
 void Matrix<T, ORDERING>::uncompress() {
+  // If already uncompressed, do nothing
   if (!compressed)
     return;
 
+  // Add element in the new storage
   for (size_t i = 0; i < n_rows; ++i) {
     for (size_t j = row_idx[i]; j < row_idx[i + 1]; ++j) {
       KeyType key{i, col_idx[j]};
@@ -144,6 +152,7 @@ void Matrix<T, ORDERING>::uncompress() {
     }
   }
 
+  // Clear the old storage
   data_compressed.clear();
   row_idx.clear();
   col_idx.clear();
@@ -156,11 +165,6 @@ void Matrix<T, ORDERING>::resize(std::size_t r, std::size_t c) {
   if (compressed) {
     throw std::runtime_error("ERROR: the matrix is in a compressed state, it's "
                              "not possible to resize it\n");
-    // std::cerr
-    //     << "The matrix is in a compressed state, it's not possible to resize
-    //     it"
-    //     << std::endl;
-    // return;
   }
 
   if (r > n_rows)
@@ -218,60 +222,78 @@ void Matrix<T, ORDERING>::read_MatrixMarket(const std::string &filename) {
 template <class T, algebra::StorageOrder ORDERING>
 template <algebra::NormType TYPE>
 double algebra::Matrix<T, ORDERING>::norm() const {
-  using namespace apsc::TypeTraits;
+  // The use of std::max_element instead of std::max is preferred for
+  // consistency since std::max cannot be used for the One case
+
+  // Infinity norm case
   if constexpr (TYPE == Infinity) {
+    // In both cases each element of par_sum will have the absolute sum of the
+    // elements on the corresponding row
+
+    // -----------------
+    // COMPRESSED FORMAT
+    // -----------------
     if (compressed) {
       std::vector<double> par_sum(n_rows, 0);
       for (size_t i = 0; i < n_rows; ++i) {
         for (size_t j = row_idx[i]; j < row_idx[i + 1]; ++j) {
-          if constexpr (is_complex<T>())
-            par_sum[i] += std::sqrt(std::norm(data_compressed[j]));
-          else
-            par_sum[i] += std::abs(data_compressed[j]);
+          par_sum[i] += std::abs(data_compressed[j]);
         }
       }
       auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
       return *max_iter;
     }
+    // -----------------
+    // DYNAMIC FORMAT
+    // -----------------
+
+    // For dynamic format we have to access each element
     std::vector<double> par_sum(n_rows, 0);
     for (size_t i = 0; i < n_rows; ++i) {
       for (size_t j = 0; j < n_cols; ++j) {
-        if constexpr (is_complex<T>())
-          par_sum[i] += std::sqrt(std::norm(this->operator()(i, j)));
-        else
-          par_sum[i] += std::abs(this->operator()(i, j));
+        par_sum[i] += std::abs(this->operator()(i, j));
       }
     }
     auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
     return *max_iter;
   }
 
+  // One norm case
   if constexpr (TYPE == One) {
+    // In both cases each element of par_sum will have the absolute sum of the
+    // elements on the corresponding column
+
+    // -----------------
+    // COMPRESSED FORMAT
+    // -----------------
     if (compressed) {
       std::vector<double> par_sum(n_cols, 0);
-      for (size_t i = 0; i < col_idx.size(); ++i) {
-        if constexpr (is_complex<T>())
-          par_sum[col_idx[i]] += std::sqrt(std::norm(data_compressed[i]));
-        else
-          par_sum[col_idx[i]] += std::abs(data_compressed[i]);
+      for (size_t j = 0; j < col_idx.size(); ++j) {
+        par_sum[col_idx[j]] += std::abs(data_compressed[j]);
       }
       auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
       return *max_iter;
     }
+    // -----------------
+    // DYNAMIC FORMAT
+    // -----------------
+
+    // For dynamic format we have to access each element
     std::vector<double> par_sum(n_cols, 0);
     for (size_t i = 0; i < n_rows; ++i) {
       for (size_t j = 0; j < n_cols; ++j) {
-        if constexpr (is_complex<T>())
-          par_sum[j] += std::sqrt(std::norm(this->operator()(i, j)));
-        else
-          par_sum[j] += std::abs(this->operator()(i, j));
+        par_sum[j] += std::abs(this->operator()(i, j));
       }
     }
     auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
     return *max_iter;
   }
 
+  // Frobenius norm case
   if constexpr (TYPE == Frobenius) {
+    // -----------------
+    // COMPRESSED FORMAT
+    // -----------------
     if (compressed) {
       double par_sum{0};
       for (const auto &elem : data_compressed) {
@@ -279,6 +301,11 @@ double algebra::Matrix<T, ORDERING>::norm() const {
       }
       return std::sqrt(par_sum);
     }
+    // -----------------
+    // DYNAMIC FORMAT
+    // -----------------
+
+    // For dynamic format we still can access only non-zero elements
     double par_sum{0};
     for (const auto &elem : data) {
       par_sum += std::norm(elem.second);
@@ -292,79 +319,78 @@ auto Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) const {
   if (r >= n_rows || c >= n_cols) {
     throw std::runtime_error("ERROR: you are trying to access an element out "
                              "of bound in a const function\n");
-    // std::cerr << "You are trying to access an element out of bound"
-    //           << std::endl;
-    // return std::numeric_limits<T>::quiet_NaN();
   }
 
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
   if (compressed) {
-    for (size_t j = row_idx[r]; j < row_idx[r + 1]; ++j) {
-      if (col_idx[j] == c)
-        return data_compressed[j];
+    for (size_t i = row_idx[r]; i < row_idx[r + 1]; ++i) {
+      if (col_idx[i] == c)
+        return data_compressed[i];
     }
-    // needed for avoiding errors with complex type
+    // If the element is not found
     T ret{};
     return ret;
   }
-
-  // find returns the iterator to the found object if it exists
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
   KeyType key{r, c};
   auto elem = data.find(key);
 
   if (elem != data.end())
     return elem->second;
-  // needed for avoiding errors with complex type
+
+  // If the element is not found
   T ret{};
   return ret;
 }
 
-// here to allow assigning new elements even if they are "out of bound", there
-// is no check on the dimensions of the matrix, and if not respected, the
-// dimensions are redefined
 template <class T, StorageOrder ORDERING>
 auto &Matrix<T, ORDERING>::operator()(std::size_t r, std::size_t c) {
+  // To allow dynamic construction, check on matrix dimensions in only done for
+  // compressed format
+
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
   if (compressed) {
-    for (size_t j = row_idx[r]; j < row_idx[r + 1]; ++j) {
-      if (col_idx[j] == c)
-        return data_compressed[j];
+    // Check on the dimensions
+    if (r >= n_cols || c >= n_cols)
+      throw std::runtime_error(
+          "ERROR: trying to add an element with the matrix "
+          "in compressed format\n");
+
+    // Check if the dimensions are correct but the element is not already
+    // present
+    for (size_t i = row_idx[r]; i < row_idx[r + 1]; ++i) {
+      if (col_idx[i] == c)
+        return data_compressed[i];
     }
     throw std::runtime_error("ERROR: trying to add an element with the matrix "
                              "in compressed format\n");
-    // std::cerr << "!!! TRYING TO ADD AN ELEMENT IN A COMPRESSED STATE !!!"
-    //           << std::endl;
-    // std::cerr << "The operation will be ignored\n" << std::endl;
-    // KeyType key{0, 0};
-    // return data[key];
   }
-
-  if ((r + 1) > n_rows)
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
+  if (r >= n_rows)
     n_rows = r + 1;
 
-  if ((c + 1) > n_cols)
+  if (c >= n_cols)
     n_cols = c + 1;
 
   KeyType key{r, c};
   return data[key];
 }
 
-// template <class T, StorageOrder ORDERING>
-// void Matrix<T, ORDERING>::upper_bound() const {
-//   KeyType second_row{2, 1};
-
-//   std::cout << "The first row of the matrix is: " << std::endl;
-
-//   auto it = data.begin();
-
-//   while (it->first < second_row) {
-//     std::cout << "M(" << it->first[0] << ", " << it->first[1]
-//               << "): " << it->second << std::endl;
-//     ++it;
-//   }
-// }
-
 template <class T, StorageOrder ORDERING>
 std::ostream &operator<<(std::ostream &os, const Matrix<T, ORDERING> &M) {
   os << "This is a " << M.n_rows << " x " << M.n_cols << " matrix" << std::endl;
+
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
   if (M.compressed) {
     os << "Compressed format" << std::endl;
 
@@ -385,47 +411,53 @@ std::ostream &operator<<(std::ostream &os, const Matrix<T, ORDERING> &M) {
 
     return os;
   }
-
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
   os << "Dynamic format" << std::endl;
   for (const auto &elem : M.data)
     os << "(" << elem.first[0] << ", " << elem.first[1] << "): " << elem.second
        << std::endl;
+
   return os;
 }
 
 template <class T, StorageOrder ORDERING>
 std::vector<T> operator*(const Matrix<T, ORDERING> &M,
                          const std::vector<T> &v) {
-
+  // Check for the dimensions
   if (M.n_cols != v.size()) {
     throw std::runtime_error(
         "ERROR: dimensions for the multiplication are not compatible\n");
-    // std::cerr << "Dimensions for the multiplication are not compatible"
-    //           << std::endl;
-    // std::vector<T> res{};
-    // return res;
   }
 
   std::vector<T> res(M.n_rows, 0);
 
-  if (!M.compressed) {
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
+  if (M.compressed) {
     for (size_t i = 0; i < M.n_rows; ++i) {
-      for (size_t j = 0; j < M.n_cols; ++j) {
-        res[i] += M(i, j) * v[j];
+      for (size_t j = M.row_idx[i]; j < M.row_idx[i + 1]; ++j) {
+        res[i] += M.data_compressed[j] * v[M.col_idx[j]];
       }
     }
     return res;
   }
-
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
   for (size_t i = 0; i < M.n_rows; ++i) {
-    for (size_t j = M.row_idx[i]; j < M.row_idx[i + 1]; ++j) {
-      res[i] += M.data_compressed[j] * v[M.col_idx[j]];
+    for (size_t j = 0; j < M.n_cols; ++j) {
+      res[i] += M(i, j) * v[j];
     }
   }
   return res;
 }
 
-// class specialization for ColumnWise ordering
+//---------------------------------------------------------------------------
+// COLUMNWISE ORDERING SPECIALIZATION
+//---------------------------------------------------------------------------
 template <class T> class Matrix<T, ColumnWise> {
 private:
   // Dynamic storage technique
@@ -436,6 +468,7 @@ private:
   std::vector<std::size_t> col_idx{};
   std::vector<T> data_compressed{};
 
+  // Boolean that records the storage technique utilized
   bool compressed = false;
 
   // Dimensions of the matrix
@@ -465,23 +498,24 @@ public:
   // Read from a file in MatrixMarket format
   void read_MatrixMarket(const std::string &filename);
 
+  // Calculate the norm of the matrix
+  template <NormType TYPE> double norm() const;
+
   // Call operators
   auto operator()(std::size_t r, std::size_t c) const;
   auto &operator()(std::size_t r, std::size_t c);
 
-  // Insertion operator that handles both storage solutions
+  // Friend operator to print the matrix on screen
+  // It handles both storage solutions
   template <class U>
   friend std::ostream &operator<<(std::ostream &os,
                                   const Matrix<U, ColumnWise> &M);
 
-  // Multiplication operator that handles Matrix * vector
+  // Multiplication friend operator that handles Matrix * vector
   template <class U>
   friend std::vector<U> operator*(const Matrix<U, ColumnWise> &M,
                                   const std::vector<U> &v);
 };
-
-// template <class T>
-// void Matrix<T, ColumnWise>::upper_bound()
 
 template <class T> bool Matrix<T, ColumnWise>::is_compressed() const {
   return compressed;
@@ -496,6 +530,7 @@ template <class T> std::size_t Matrix<T, ColumnWise>::cols() const {
 }
 
 template <class T> void Matrix<T, ColumnWise>::compress() {
+  // If already compressed, do nothing
   if (compressed)
     return;
 
@@ -507,6 +542,7 @@ template <class T> void Matrix<T, ColumnWise>::compress() {
 
   std::size_t idx = 0;
 
+  // Add element in the new storage
   for (auto iter = data.cbegin(); iter != data.cend(); ++iter) {
     col_idx[iter->first[1] + 1] += 1;
     row_idx[idx] = iter->first[0];
@@ -514,19 +550,24 @@ template <class T> void Matrix<T, ColumnWise>::compress() {
     ++idx;
   }
 
+  // As it was before, col_idx contained the number of non-zero elements on that
+  // column
   for (std::size_t idx = 1; idx < n_rows + 1; ++idx) {
     col_idx[idx] += col_idx[idx - 1];
   }
 
+  // Clear the old storage
   data.clear();
 
   compressed = true;
 }
 
 template <class T> void Matrix<T, ColumnWise>::uncompress() {
+  // If already uncompressed, do nothing
   if (!compressed)
     return;
 
+  // Add element in the new storage
   for (size_t i = 0; i < n_rows; ++i) {
     for (size_t j = col_idx[i]; j < col_idx[i + 1]; ++j) {
       KeyType key{row_idx[j], i};
@@ -534,6 +575,7 @@ template <class T> void Matrix<T, ColumnWise>::uncompress() {
     }
   }
 
+  // Clear the old storage
   data_compressed.clear();
   row_idx.clear();
   col_idx.clear();
@@ -546,11 +588,6 @@ void Matrix<T, ColumnWise>::resize(std::size_t r, std::size_t c) {
   if (compressed) {
     throw std::runtime_error("ERROR: the matrix is in a compressed state, it's "
                              "not possible to resize it\n");
-    // std::cerr
-    //     << "The matrix is in a compressed state, it's not possible to resize
-    //     it"
-    //     << std::endl;
-    // return;
   }
 
   if (r > n_rows)
@@ -606,83 +643,177 @@ void Matrix<T, ColumnWise>::read_MatrixMarket(const std::string &filename) {
 }
 
 template <class T>
+template <algebra::NormType TYPE>
+double algebra::Matrix<T, ColumnWise>::norm() const {
+  // The use of std::max_element instead of std::max is preferred for
+  // consistency since std::max cannot be used for the Infinity case
+
+  // Infinity norm case
+  if constexpr (TYPE == Infinity) {
+    // In both cases each element of par_sum will have the absolute sum of the
+    // elements on the corresponding row
+
+    // -----------------
+    // COMPRESSED FORMAT
+    // -----------------
+    if (compressed) {
+      std::vector<double> par_sum(n_rows, 0);
+      for (size_t i = 0; i < row_idx.size(); ++i) {
+        par_sum[row_idx[i]] += std::abs(data_compressed[i]);
+      }
+      auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+      return *max_iter;
+    }
+    // -----------------
+    // DYNAMIC FORMAT
+    // -----------------
+
+    // For dynamic format we have to access each element
+    std::vector<double> par_sum(n_rows, 0);
+    for (size_t i = 0; i < n_rows; ++i) {
+      for (size_t j = 0; j < n_cols; ++j) {
+        par_sum[i] += std::abs(this->operator()(i, j));
+      }
+    }
+    auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+    return *max_iter;
+  }
+
+  // One norm case
+  if constexpr (TYPE == One) {
+    // In both cases each element of par_sum will have the absolute sum of the
+    // elements on the corresponding column
+
+    // -----------------
+    // COMPRESSED FORMAT
+    // -----------------
+    if (compressed) {
+      std::vector<double> par_sum(n_cols, 0);
+      for (size_t j = 0; j < n_cols; ++j) {
+        for (size_t i = col_idx[j]; i < col_idx[j + 1]; ++i) {
+          par_sum[j] += std::abs(data_compressed[i]);
+        }
+      }
+      auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+      return *max_iter;
+    }
+    // -----------------
+    // DYNAMIC FORMAT
+    // -----------------
+
+    // For dynamic format we have to access each element
+    std::vector<double> par_sum(n_cols, 0);
+    for (size_t i = 0; i < n_rows; ++i) {
+      for (size_t j = 0; j < n_cols; ++j) {
+        par_sum[j] += std::abs(this->operator()(i, j));
+      }
+    }
+    auto max_iter = std::max_element(par_sum.begin(), par_sum.end());
+    return *max_iter;
+  }
+
+  // Frobenius norm case
+  if constexpr (TYPE == Frobenius) {
+    // -----------------
+    // COMPRESSED FORMAT
+    // -----------------
+    if (compressed) {
+      double par_sum{0};
+      for (const auto &elem : data_compressed) {
+        par_sum += std::norm(elem);
+      }
+      return std::sqrt(par_sum);
+    }
+    // -----------------
+    // DYNAMIC FORMAT
+    // -----------------
+
+    // For dynamic format we still can access only non-zero elements
+    double par_sum{0};
+    for (const auto &elem : data) {
+      par_sum += std::norm(elem.second);
+    }
+    return std::sqrt(par_sum);
+  }
+}
+
+template <class T>
 auto Matrix<T, ColumnWise>::operator()(std::size_t r, std::size_t c) const {
   if (r >= n_rows || c >= n_cols) {
     throw std::runtime_error("ERROR: you are trying to access an element out "
                              "of bound in a const function\n");
-    // std::cerr << "You are trying to access an element out of bound"
-    //           << std::endl;
-    // return std::numeric_limits<T>::quiet_NaN();
   }
 
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
   if (compressed) {
     for (size_t j = col_idx[c]; j < col_idx[c + 1]; ++j) {
       if (row_idx[j] == r)
         return data_compressed[j];
     }
-    // needed for avoiding errors with complex type
+    // If the element is not found
     T ret{};
     return ret;
   }
-
-  // find returns the iterator to the found object if it exists
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
   KeyType key{r, c};
   auto elem = data.find(key);
 
   if (elem != data.end())
     return elem->second;
-  // needed for avoiding errors with complex type
+
+  // If the element is not found
   T ret{};
   return ret;
 }
 
-// here to allow assigning new elements even if they are "out of bound", there
-// is no check on the dimensions of the matrix, and if not respected, the
-// dimensions are redefined
 template <class T>
 auto &Matrix<T, ColumnWise>::operator()(std::size_t r, std::size_t c) {
+  // To allow dynamic construction, check on matrix dimensions in only done for
+  // compressed format
+
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
   if (compressed) {
+    // Check on the dimensions
+    if (r >= n_cols || c >= n_cols)
+      throw std::runtime_error(
+          "ERROR: trying to add an element with the matrix "
+          "in compressed format\n");
+
+    // Check if the dimensions are correct but the element is not already
+    // present
     for (size_t j = col_idx[c]; j < col_idx[c + 1]; ++j) {
       if (row_idx[j] == r)
         return data_compressed[j];
     }
     throw std::runtime_error("ERROR: trying to add an element with the matrix "
                              "in compressed format\n");
-    // std::cerr << "!!! TRYING TO ADD AN ELEMENT IN A COMPRESSED STATE !!!"
-    //           << std::endl;
-    // std::cerr << "The operation will be ignored\n" << std::endl;
-    // KeyType key{0, 0};
-    // return data[key];
   }
-
-  if ((r + 1) > n_rows)
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
+  if (r >= n_rows)
     n_rows = r + 1;
 
-  if ((c + 1) > n_cols)
+  if (c >= n_cols)
     n_cols = c + 1;
 
   KeyType key{r, c};
   return data[key];
 }
 
-// template <class T, StorageOrder ORDERING>
-// void Matrix<T, ORDERING>::upper_bound() const {
-//   KeyType second_row{2, 1};
-
-//   std::cout << "The first row of the matrix is: " << std::endl;
-
-//   auto it = data.begin();
-
-//   while (it->first < second_row) {
-//     std::cout << "M(" << it->first[0] << ", " << it->first[1]
-//               << "): " << it->second << std::endl;
-//     ++it;
-//   }
-// }
-
 template <class T>
 std::ostream &operator<<(std::ostream &os, const Matrix<T, ColumnWise> &M) {
   os << "This is a " << M.n_rows << " x " << M.n_cols << " matrix" << std::endl;
+
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
   if (M.compressed) {
     os << "Compressed format" << std::endl;
 
@@ -703,41 +834,45 @@ std::ostream &operator<<(std::ostream &os, const Matrix<T, ColumnWise> &M) {
 
     return os;
   }
-
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
   os << "Dynamic format" << std::endl;
   for (const auto &elem : M.data)
     os << "(" << elem.first[0] << ", " << elem.first[1] << "): " << elem.second
        << std::endl;
+
   return os;
 }
 
 template <class T>
 std::vector<T> operator*(const Matrix<T, ColumnWise> &M,
                          const std::vector<T> &v) {
-
+  // Check for the dimensions
   if (M.n_cols != v.size()) {
     throw std::runtime_error(
         "ERROR: dimensions for the multiplication are not compatible\n");
-    // std::cerr << "Dimensions for the multiplication are not compatible"
-    //           << std::endl;
-    // std::vector<T> res{};
-    // return res;
   }
 
   std::vector<T> res(M.n_rows, 0);
 
-  if (!M.compressed) {
-    for (size_t i = 0; i < M.n_rows; ++i) {
-      for (size_t j = 0; j < M.n_cols; ++j) {
-        res[i] += M(i, j) * v[j];
+  // -----------------
+  // COMPRESSED FORMAT
+  // -----------------
+  if (M.compressed) {
+    for (size_t j = 0; j < M.n_cols; ++j) {
+      for (size_t i = M.col_idx[j]; i < M.col_idx[j + 1]; ++i) {
+        res[M.row_idx[i]] += M.data_compressed[i] * v[j];
       }
     }
     return res;
   }
-
-  for (size_t i = 0; i < M.n_cols; ++i) {
-    for (size_t j = M.col_idx[i]; j < M.col_idx[i + 1]; ++j) {
-      res[M.row_idx[j]] += M.data_compressed[j] * v[i];
+  // -----------------
+  // DYNAMIC FORMAT
+  // -----------------
+  for (size_t i = 0; i < M.n_rows; ++i) {
+    for (size_t j = 0; j < M.n_cols; ++j) {
+      res[i] += M(i, j) * v[j];
     }
   }
   return res;

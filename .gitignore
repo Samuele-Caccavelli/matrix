@@ -34,3 +34,5 @@
 # Personalized
 *.vscode
 clang.md
+*.mtx
+*.mtx.gz
