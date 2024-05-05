@@ -19,7 +19,7 @@ The main present lots of test to be run to check the implementation of the class
 
 As it is, only the tests for row-wise matrices are run to avoid clutter the terminal too much. Another main is already given to run the tests for column-wise matrices. To do that just comment lines 50 to 198 and uncomment lines 200 to 349.
 
-**ATTENTION:** At line 92 and 242 the test that can be run are set up to fail and throw an exception that will stop the program. Make sure to comment them to continue with the tests.
+**ATTENTION:** At line 92 and 242 the test that can be run are set up to fail and throw an exception that will stop the program. Make sure they are commented to continue with the tests.
 
 All the tests are run by some helpers functions that whose description is reported here (other then having it near their declaration):
 - `void test1(auto &M)`:
@@ -58,3 +58,35 @@ Perform a matrix x complex vector operation
 ```
 Computes the 3 different norms of a matrix
 ```
+
+## MATRIX CLASS
+Here are the functions that form the public interface of the class:
+- `Matrix(std::size_t r = 0, std::size_t c = 0)`
+- `bool is_compressed() const`
+- 
+    ```
+    std::size_t rows() const
+    std::size_t cols() const
+    ```
+- `void compress()`
+- `void resize(std::size_t r = 0, std::size_t c = 0)`
+- `void read_MatrixMarket(const std::string &filename)`
+- `template <NormType TYPE> double norm() const`
+- 
+    ```
+    auto operator()(std::size_t r, std::size_t c) const
+    auto &operator()(std::size_t r, std::size_t c)
+    ```
+- 
+    ```
+    template <class U, StorageOrder ORDER>
+    friend std::ostream
+    &operator<<(std::ostream &os, const Matrix<U, ORDER> &M)
+    ```
+- 
+    ```
+    template <class U, StorageOrder ORDER>
+    friend std::vector<U> 
+    operator*(const Matrix<U, ORDER> &M, const std::vector<U> &v)
+    ```
+
