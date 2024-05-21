@@ -1,0 +1,21 @@
+README.md: please check your english: there are many typos :)
+
+
+Checklist:
+  - sparse_matrix constructor:   OKAY
+  - compress:                    OKAY
+  - uncompress:                  OKAY
+  - data is properly cleared:    OKAY
+  - call to non-const / const assignment operator: OKAY
+  - resize method:               OKAY
+  - operator*:                   OKAY
+  - reading from file:           OKAY
+
+EXTRAs
+  - One Column Matrix:           OKAY
+  - Norms:                       OKAY 
+
+General Comments:
+  - Really loved the download with wget: NICE!
+  - The code is very well written and organized. HOWEVER. Don't push large chunks of commented code!!!
+    In your final push, these should be removed.
